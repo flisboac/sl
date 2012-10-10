@@ -1,8 +1,13 @@
+/**
+ * @file include/sl/types.h
+ */
+
 #ifndef SL_TYPES_H_
 #define SL_TYPES_H_
 
 #include <stdio.h>
 #include <stddef.h>
+#include "sldefs.h"
 
 #define sl_INVALIDSIZE ((size_t)-1)
 #define sl_INVALIDPOINT ((long int)0xffffffffL)
@@ -61,21 +66,24 @@ typedef enum sl_EStreamType_t {
 	, sl_FILE
 } sl_EStreamType;
 
-typedef unsigned int sl_Ctypes;       /* An integer with flags describing a character's types. */
-typedef long int sl_Cpoint;           /* An encoding's code point. */
-typedef struct sl_Ctrait_t sl_Ctrait; /* The encoding itself. */
-typedef struct sl_Env_t sl_Env;       /* The stream environment, to avoid global states. */
-typedef struct sl_Cconv_t sl_Cconv;   /* A type that can transcode streams. */
-typedef struct sl_Stream_t sl_Stream; /* The base stream object. */
-typedef struct sl_Pos_t sl_Pos;       /* An object representing a position inside a stream. */
-typedef ptrdiff_t sl_Off;             /* A type representing an offset starting from a position. */
+typedef unsigned int sl_Ctypes;       /**< An integer with flags describing a character's types. */
+typedef long int sl_Cpoint;           /**< An encoding's code point. */
+typedef struct sl_Ctrait_t sl_Ctrait; /**< The encoding itself. */
+typedef struct sl_Env_t sl_Env;       /**< The stream environment, to avoid global states. */
+typedef struct sl_Cconv_t sl_Cconv;   /**< A type that can transcode streams. */
+typedef struct sl_Stream_t sl_Stream; /**< The base stream object. */
+typedef struct sl_Regex_t sl_Regex;   /**< A pattern matching object. */
+typedef struct sl_Pos_t sl_Pos;       /**< An object representing a position inside a stream. */
+typedef struct sl_StreamApi_t sl_StreamApi;
+typedef ptrdiff_t sl_Off;             /**< A type representing an offset starting from a position. */
 
-typedef void* (*sl_FAlloc)(void* ptr, size_t sz);
+typedef void* (*sl_FAlloc)(void* state, void* ptr, size_t sz);
 
 struct sl_Stream_t {
 
-	sl_Env *env;
+	sl_EStreamType type;
 	sl_Ctrait *enc;
+	const sl_StreamApi *api;
 };
 
 struct sl_Pos_t {

@@ -1,3 +1,7 @@
+/**
+ * @file include/sl.h
+ */
+
 #ifndef SL_H_
 #define SL_H_
 
@@ -40,7 +44,7 @@ The following assumptions can be made of strings:
 #include "sldefs.h"
 #include "sl/types.h"
 #include "sl/util.h"
-#include "sl/env.h"
+#include "sl/api.h"
 #include "sl/stream.h"
 #include "sl/string.h"
 #include "sl/file.h"
