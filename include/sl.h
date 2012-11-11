@@ -97,10 +97,11 @@ Extra types:
 #define sl_NOPOINT ((long int)0xffffffffL)
 #define sl_NOCMP (-2)
 
-#define sl_READ "r"
-#define sl_WRITE "w"
-#define sl_PREPEND "p"
-#define sl_BINARY "b"
+#define sl_MODEMASK (0x000F)
+#define sl_READ     (0x0001)
+#define sl_WRITE    (0x0002)
+#define sl_BINARY   (0x0004)
+#define sl_PREPEND  (0x0008)
 
 #define sl_CTYPE (0x2fff) /**< The valid range of ctype flags. */
 #define sl_ALPHA (0x0001) /**< An alphanumeric character. */
@@ -199,11 +200,6 @@ typedef enum sl_EEcode {
 } sl_EEcode;
 
 
-/* Reminder: sl_ENature represents a nature, not a type.
- * The type of a stream is its API. Whether it can be used exchangeably with
- * other APIs based on its nature is implementation-dependent, and therefore,
- * not portable.
- */
 typedef enum sl_ENature_ {
 
 	  sl_NAT_NONE   /**< The stream has no specific nature. */
@@ -222,39 +218,43 @@ typedef enum sl_ENature_ {
  * [[[   TYPE DEFINITIONS   ]]]
  */
 
-
 /* Immediate types */
 typedef unsigned int sl_Ctypes;      /**< An integer with flags describing a character's types. */
-typedef long int sl_Cpoint;          /**< An encoding's code point. */
-typedef long int sl_Off;             /**< A type representing an offset starting from a position. */
+typedef long int     sl_Cpoint;      /**< An encoding's code point. */
+typedef long int     sl_Off;         /**< A type representing an offset starting from a position. */
 
 /* Base types */
 typedef struct sl_Ctrait_ sl_Ctrait; /**< The encoding itself. */
-typedef struct sl_Cconv_ sl_Cconv;   /**< An encoding conversion object. */
+typedef struct sl_Cconv_  sl_Cconv;  /**< An encoding conversion object. */
 
 /* Environment */
 typedef struct sl_Stream_ sl_Stream; /**< The base stream object. */
-typedef struct sl_Pos_ sl_Pos;       /**< An object representing a position inside a stream. */
+typedef struct sl_Pos_    sl_Pos;    /**< An object representing a position inside a stream. */
 
 /* Streams */
 typedef struct sl_StreamApi_ sl_StreamApi;
-typedef struct sl_State_ sl_State;
-typedef struct sl_Opts_ sl_Opts;
+typedef struct sl_State_     sl_State;
+typedef struct sl_Opts_      sl_Opts;
 
-/* Files */
-typedef struct sl_FileNature_ sl_FileNature;
-typedef struct sl_FileState_ sl_FileState;
-typedef struct sl_FileOpts_ sl_FileOpts;
+/* Natures */
+typedef struct sl_FilterState_  sl_FilterState;
+typedef struct sl_FilterNature_ sl_FilterNature;
+typedef struct sl_BufferState_  sl_BufferState;
+typedef struct sl_BufferNature_ sl_BufferNature;
+typedef struct sl_FileState_    sl_FileState;
+typedef struct sl_FileNature_   sl_FileNature;
+typedef struct sl_StringState_  sl_StringState;
+typedef struct sl_StringNature_ sl_StringNature;
 
-/* Strings */
-typedef struct sl_StringApi_ sl_StringApi;
-typedef struct sl_StringState_ sl_StringState;
-typedef struct sl_StringOpts_ sl_StringOpts;
+/* Options */
+typedef struct sl_StringOpts_   sl_StringOpts;
+typedef struct sl_StdfileOpts_  sl_StdfileOpts;
+typedef struct sl_FileOpts_     sl_FileOpts;
 
 /* Function signatures */
-typedef int (*sl_FEvent)(void* state, sl_EEcode ecode, sl_Stream* S, sl_Pos* P);
-typedef void* (*sl_FAlloc)(void* state, void* ptr, size_t sz, size_t align);
-typedef sl_Cconv* (*sl_FOpenconv)(sl_Ctrait* from, sl_Ctrait* to, sl_FAlloc allocf, void* allocp);
+typedef int       (*sl_FEvent)  (void* state, sl_EEcode ecode, sl_Stream* S, sl_Pos* P);
+typedef void*     (*sl_FAlloc)  (void* allocp, void* ptr, size_t sz, size_t align);
+typedef sl_Cconv* (*sl_FCcopen) (sl_Ctrait* from, sl_Ctrait* to, sl_FAlloc allocf, void* allocp);
 
 
 /*##############################################################################
@@ -264,173 +264,114 @@ typedef sl_Cconv* (*sl_FOpenconv)(sl_Ctrait* from, sl_Ctrait* to, sl_FAlloc allo
 
 struct sl_Cconv_ {
 
-	sl_Ctrait* from_enc;
-	sl_Ctrait* to_enc;
+	sl_Ctrait*  from_enc;
+	sl_Ctrait*  to_enc;
 	const char* from;
-	char* to;
-	char* from_pos;
-	char* to_pos;
-	size_t from_sz;
-	size_t to_sz;
+	char*       to;
+	char*       from_pos;
+	char*       to_pos;
+	size_t      from_sz;
+	size_t      to_sz;
 
-	sl_EEcode (*step)(sl_Cconv* conv, size_t step);
-	sl_EEcode (*dispose)(sl_Cconv* conv);
+	sl_EEcode (*step)    (sl_Cconv* conv, size_t step);
+	sl_EEcode (*dispose) (sl_Cconv* conv);
 };
 
 
-/*
- * All functions in a character trait should be reentrant, and do what they can
- * to not introduce side-effects. A character trait is about how the binary
- * stream is organized, it should not use any global state or call
- * non-reentrant functions.
- */
 struct sl_Ctrait_t {
 
-	const sl_Ctrait *base;
-	const char* name;
-    const size_t minsize;
-    const size_t maxsize;
-    const sl_Cpoint eof;
+	const sl_Ctrait* base;
+	const char*      name;
+    const size_t     minsize;
+    const size_t     maxsize;
+    const sl_Cpoint  eof;
 
-    /* Seeks `off` characters in a buffer `s` of size `sz`,
-     * starting from the position `*pos`. If `*pos` is null, it's assumed to
-     * start from the beginning of the buffer, and if off is negative in this
-     * case, the search is backwards and starts from the end of the stream.
-     * At the end of the process, the number of bytes for the character found
-     * will be returned, or 0 if no character was found.
-     * `pos` is allowed to point to the same initial string as `s`, and the
-     * function must identify it appropriately.
-     * `pos` and `s` cannot be null.
-     * - The first character could be written as `seek(T, s, sz, 0, NULL)`
-     * - The next character could be written as `seek(T, s, sz, 1, NULL)`
-     * - The last character could be written as `seek(T, s, sz, -1, NULL)`
-     * - validchar check could be written as `seek(T, s, maxsize, 0, NULL) != NULL`
-     * - size of string can be computed as sequenced calls to the function,
-     *   one character at a time, until no character is read.
-     *   (considering s has maxsize bytes)
-     */
-    size_t (*seek)(sl_Ctrait* T, char *s, size_t sz, sl_Off off, char **pos);
-
-    /* Gets the equivalent cpoint for the next character.
-     * Returns sl_NOPOINT on error. */
-    sl_Cpoint (*cpoint)(sl_Ctrait* T, char *s, size_t sz);
-
-    /* Transforms the code point into a string.
-	 * s must be a pre-allocated buffer with at least minsize bytes.
-     * Returns sl_INVALIDSIZE in case of error.
-     * If s is NULL, the function simply returns the number of bytes
-     * required for storing the character. */
-    size_t (*tostr)(sl_Ctrait* T, sl_Cpoint cpoint, char *s, size_t sz);
-
-    /* Gets all valid ctypes for the character point passed. */
-    sl_Ctypes (*ctypes)(sl_Ctrait* T, sl_Cpoint cpoint);
-
-    /* tolower, toupper */
-    sl_Cpoint (*tolower)(sl_Ctrait* T, sl_Cpoint cpoint);
-    sl_Cpoint (*toupper)(sl_Ctrait* T, sl_Cpoint cpoint);
-
-    /* Compares two strings. Translates characters if needed.
-     */
-    int (*compare)(sl_Ctrait* T, const char* a, size_t a_sz, const char* b, size_t b_sz);
-
-    /* Transforms the string such that it can be safely compared
-     * lexicographically. The result is a binary-safe string that can be used
-     * to compare between another transformed string without having to translate
-     * characters or worry about encoding issues (like multi-byte, etc).
-     * Note that transformed strings must only be compared with other
-     * transformed strings of the same character trait.
-     * If to is null or if to_sz is 0, the function simply returns the number
-     * of bytes that the transformed string would require.
-     */
-    size_t (*transform)(sl_Ctrait* T, const char* from, size_t from_sz, char* to, size_t to_sz);
+    size_t    (*seek)    (sl_Ctrait* T, char *s, size_t sz, sl_Off off, char **pos);
+    sl_Cpoint (*cpoint)  (sl_Ctrait* T, char *s, size_t sz);
+    size_t    (*tostr)   (sl_Ctrait* T, sl_Cpoint cpoint, char *s, size_t sz);
+    sl_Ctypes (*ctypes)  (sl_Ctrait* T, sl_Cpoint cpoint);
+    sl_Cpoint (*tolower) (sl_Ctrait* T, sl_Cpoint cpoint);
+    sl_Cpoint (*toupper) (sl_Ctrait* T, sl_Cpoint cpoint);
+    int       (*cmp)     (sl_Ctrait* T, const char* a, size_t a_sz, const char* b, size_t b_sz);
+    size_t    (*xfrm)    (sl_Ctrait* T, const char* from, size_t from_sz, char* to, size_t to_sz);
 };
 
 
 struct sl_Stream_ {
 
-	sl_StreamApi *api;
-	sl_EEcode ecode;
-	sl_Ctrait *enc;    /**< The stream's encoding. If it has no encoding,
-	                        the stream is considered to be binary (instead
-	                        of text-based), and reads-writes are in terms
-	                        of bytes (instead of characters). */
+	sl_StreamApi* api;
+	sl_Ctrait*    enc;
 };
 
 
 struct sl_Pos_ {
 
-    sl_Stream *S;  /**< The stream from where this position was originated.
-                        Positions are not exchangeable between different stream
-                        instances, even if they're of the same type. */
-    int aligned;   /**< If 1, the position is character-aligned.
-                        Positions are always given in bytes, but if this flag is
-                        set, the position is in a character boundary, meaning
-                        that the position is right after a previous character
-                        (considering that it's not set to the start of the
-                        stream, in which case it's always considered to be
-                        aligned). */
+    sl_Stream* stream;
+    int        aligned;
 
-    void (*dispose)(sl_Pos* pos);
+    void (*dispose) (sl_Pos* pos);
 };
 
 
 struct sl_Opts_ {
 
-	/* Basic */
-	sl_FAlloc allocf;
-	void* allocp;
-	sl_FEvent eventf;
-	void* eventp;
-	const char* mode; /**< The operational mode. */
+	sl_FAlloc    allocf;
+	void*        allocp;
+	sl_FEvent    eventf;
+	void*        eventp;
+	unsigned int mode;
+};
+
+
+struct sl_State_ {
+
+	unsigned int mode;
 };
 
 
 struct sl_StreamApi_ {
 
+	sl_StreamApi* base;
 
-	/*
-	 * Implementation details.
-	 */
+	const char*       (*getimplname)   (sl_StreamApi* A);
+	const sl_ENature* (*getnatures)    (sl_StreamApi* A);
+	void**            (*getnatureapis) (sl_StreamApi* A);
 
-	sl_StreamApi *base;
-	const char* (*getimplname)(sl_StreamApi *A);
-	const sl_ENature* (*getnatures)(sl_StreamApi *A);
-	void** (*getnatureapis)(sl_StreamApi *A);
+	sl_Stream* (*openwith) (sl_StreamApi* A, sl_Opts* opts);
+	sl_Stream* (*reopen)   (sl_StreamApi* A, sl_Stream* S, sl_Opts* opts);
+	sl_EEcode  (*close)    (sl_StreamApi* A, sl_Stream* S);
+	sl_State*  (*getstate) (sl_StreamApi* A, sl_Stream* S, sl_State* state);
 
-	/*
-	 * Creation and disposal.
-	 */
+	size_t     (*read)     (sl_StreamApi* A, sl_Stream* S, char* buf, size_t sz, size_t nchars);
+	size_t     (*write)    (sl_StreamApi* A, sl_Stream* S, char* buf, size_t sz, size_t nchars);
+	int        (*flush)    (sl_StreamApi* A, sl_Stream* S);
 
-	sl_Stream* (*openwith)(sl_StreamApi *A, sl_Opts* opts);
-	sl_Stream* (*reopen)(sl_StreamApi *A, sl_Stream* S, sl_Opts* opts);
-	sl_EEcode (*close)(sl_StreamApi *A, sl_Stream* S);
-
-	/*
-	 * Read/Write.
-	 * sz is the size of the buffer buf, in bytes.
-	 * nchars indicates the number of characters to read or write.
-	 * If nchars == 0, this indicates a binary read, disregarding the
-	 * encoding of the stream, and buf will be filled with sz bytes.
-	 * If nchars == sl_NOSIZE, it tries to read all available characters
-	 * from the stream, up until an error condition is met, like
-	 * end-of-stream or invalid sequences.
-	 * The value returned is either the number of characters or bytes read,
-	 * depending on the value of nsize, as described earlier.
-	 */
-
-	size_t (*read)(sl_StreamApi* A, sl_Stream* S, char* buf, size_t sz, size_t nchars);
-	size_t (*write)(sl_StreamApi* A, sl_Stream* S, char* buf, size_t sz, size_t nchars);
-	int (*flush)(sl_StreamApi* A, sl_Stream* S);
-
-	/*
-	 * Positioning
-	 */
-
-	sl_Pos* (*getpos)(sl_StreamApi *A, sl_Stream* S);
-	sl_EEcode (*setpos)(sl_StreamApi *A, sl_Stream* S, sl_Pos* pos);
-	sl_EEcode (*tell)(sl_StreamApi *A, sl_Stream* S, sl_Off* off);
-	sl_EEcode (*seek)(sl_StreamApi *A, sl_Stream* S, sl_Off off, int where);
+	sl_Pos*    (*getpos)   (sl_StreamApi* A, sl_Stream* S);
+	sl_EEcode  (*setpos)   (sl_StreamApi* A, sl_Stream* S, sl_Pos* pos);
+	sl_EEcode  (*tell)     (sl_StreamApi* A, sl_Stream* S, sl_Off* off);
+	sl_EEcode  (*seek)     (sl_StreamApi* A, sl_Stream* S, sl_Off off, int where);
 };
+
+
+/*##############################################################################
+ * [[[   FILTER STRUCTS AND UNIONS   ]]]
+ */
+
+
+struct sl_FilterState_ {
+
+	sl_State state;
+	sl_Stream* base;
+};
+
+
+struct sl_FilterNature_ {
+
+	sl_FilterState*  (*getstate)    (sl_FilterNature* A, sl_Stream* S, sl_FilterState* state);
+};
+
+
+sl_API sl_FilterState* sl_getfilterstate(sl_Stream* S, sl_FilterState* state);
 
 
 /*##############################################################################
@@ -438,10 +379,21 @@ struct sl_StreamApi_ {
  */
 
 
-struct sl_BufferApi_ {
+struct sl_BufferState_ {
 
-
+	sl_State state;
+	size_t sz;
+	size_t cap;
 };
+
+
+struct sl_BufferNature_ {
+
+	sl_BufferState*  (*getstate)    (sl_BufferNature* A, sl_Stream* S, sl_BufferState* state);
+};
+
+
+sl_API sl_BufferState* sl_getbufferstate(sl_Stream* S, sl_BufferState* state);
 
 
 /*##############################################################################
@@ -449,41 +401,45 @@ struct sl_BufferApi_ {
  */
 
 
-struct sl_FileOpts_ {
+struct sl_FileState_ {
 
-	sl_Opts opts;
-	const char* path;
+	sl_State       state;
+	const char*    path;
+	const wchar_t* wpath;
+	long int       fhandle;
+	void*          fptr;
 };
 
-struct sl_FileApi_ {
 
+struct sl_FileNature_ {
 
-	/*
-	 * State
-	 */
-
-	int (*getfhandle)(sl_FileApi *A, sl_Stream* S);
-	void* (*getfpointer)(sl_FileApi *A, sl_Stream* S);
-	const char* (*getfpath)(sl_FileApi *A, sl_Stream* S);
-	const wchar_t* (*getfwpath)(sl_FileApi *A, sl_Stream* S);
+	sl_FileState*  (*getstate)    (sl_FileNature* A, sl_Stream* S, sl_FileState* state);
 };
+
+
+sl_API sl_FileState* sl_getfilestate(sl_Stream* S, sl_FileState* state);
 
 
 /*##############################################################################
- * [[[   STRING STRUCTS AND UNIONS   ]]]
+ * [[[   STRING STRUCTS, UNIONS AND APIS   ]]]
  */
 
-struct sl_StringOpts_ {
+
+struct sl_StringState_ {
 
 	sl_Opts opts;
+	size_t sz;
 	size_t cap;
 };
 
 
-struct sl_StringApi_ {
+struct sl_StringNature_ {
 
-
+	sl_StringState*  (*getstate)    (sl_StringNature* A, sl_Stream* S, sl_StringState* state);
 };
+
+
+sl_API sl_StringState* sl_getstringstate(sl_Stream* S, sl_StringState* state);
 
 
 /*##############################################################################
@@ -491,9 +447,42 @@ struct sl_StringApi_ {
  */
 
 
+struct sl_StringOpts_ {
+
+	sl_Opts opts;
+	size_t  cap;
+};
+
+
+struct sl_StdfileOpts_ {
+
+	sl_Opts     opts;
+	const char* path;
+};
+
+
+struct sl_FileOpts_ {
+
+	sl_Opts opts;
+	const char*    path;
+	const wchar_t* wpath;
+};
+
+
+sl_DATA const sl_StreamApi* const sl_stdfile;
+sl_DATA const sl_StreamApi* const sl_cstring;
+sl_DATA const sl_StreamApi* const sl_file;
+
+sl_DATA const sl_Ctrait* const sl_ctrait_ascii;
+sl_DATA const sl_Ctrait* const sl_ctrait_slenc;
+sl_DATA const sl_Ctrait* const sl_ctrait_char;
+sl_DATA const sl_Ctrait* const sl_ctrait_wchar;
+
+
 /*##############################################################################
  * [[[   UTILITY API   ]]]
  */
+
 
 sl_API sl_FAlloc sl_getalloc(void **allocf);
 
