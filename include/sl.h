@@ -1,80 +1,17 @@
 /**
- * @file include/sl.h
+ * @file sl.h
+ * 
+ * Defines the library's client interface.
  */
 
 #ifndef SL_H_
 #define SL_H_
 
-/*
-
-General considerations:
-
-- SIZE (size) is the actual size, in bytes, of the stream. This may not be known
-  in advance, but will almost be for strings.
-- CAPACITY (cap) is size, in bytes, of the amount of bytes the stream can
-  accomodate. Generally, SIZE == CAPACITY unless stated otherwise. As with
-  size, it may not be known in advance.
-- LENGTH (len) is the size, in characters (or character points), in a stream.
-
-The following assumptions can be made of strings:
-- DATA: Stream data is represented by `char*`. This does not imply byte or
-  multi-byte strings. A stream data can have fixed increment steps to retrieve a
-  element (typecast to a wchar_t to perform pointer arithmetic, or do increments
-  6-bytes at a time, for example), or do an unknwon way to retrieve characters.
-- CHARACTER POINT: A `long` represents a point, a value that uniquely represents
-  a character in its traits environment (in other words, in the encoding
-  represented by the trait). The library makes the assumption that long is at
-  least 32-bits wide. For Unicode, for example, this means a grapheme.
-  If long is not enough to uniquely represent a character, i guess you have a
-  rather big environment to deal with...
-- CHARACTER TYPES: Character types are represented by flags in an `unsigned int`
-  value. The library makes the assumption that ints are at least 16-bits wide.
-  If not, well, sorry...
-- CAPACITY AND SIZE: Capacity and size are given in `size_t`.
-- POSITION: Due to the nature of this arrangement, character positions in the
-  strings are also given in `char*`.
-- ABSOLUTE INDEXING: Absolute indexing of string contents, be it in bytes or
-  in characters, are given in `size_t`. Indexing, in this context, means
-  accessing string data through array indices, like in `str[0]`.
-- RELATIVE POSITIONING: Relative positioning, be it in bytes or in characters,
-  is given in `ptrdiff_t`, and always parts from a pointer position. 
-
-Immediate types:
-	- OFF:    Represents an offset
-	- CPOINT: Represents a character point in a specific encoding.
-	          It's equivalent to int for char, or wint_t for wchar_t.
-	- CTYPES: An integer with flags describing character types for a character.
-
-Base types:
-	- STREAM: Basic type that represents a stream of data.
-	- NATURE: Represents a specific nature of a stream.
-	          Natures are not objects per se, they're interfaces present on
-	          the stream's API.
-	- POS:    Represents a position inside a stream.
-	- LOCALE: Represents cultural-dependent options.
-	- LFACET: Represents a specific aspect of a locale.
-	          These can be either of:
-	          - collate:
-	          - ctrait:
-	          - monetary:
-	          - messages:
-	          - numeric:
-	          - time:
-
-	- CTRAIT: An encoding, a way to tell how to interpret data.
-	- CCONV:  Converts from one encoding to another.
-
-Extra types:
-	- REGEX:  A basic regular expression engine.
-
-- Locale will be left for inclusion in later revisions.
-
-*/
-
 #include <stddef.h>
+#include <stdarg.h>
 
-/*##############################################################################
- * [[[   CONFIGURATION   ]]]
+/*
+ * [ [ [   CONFIGURATION   ] ] ] ===============================================
  */
 
 
@@ -84,62 +21,9 @@ Extra types:
 #define sl_MINORVERSION (1)/*@@MINORVERSION@@*/
 #define sl_PATCHVERSION (0)/*@@PATCHVERSION@@*/
 
-
-/*##############################################################################
- * [[[   DEFINES   ]]]
- */
-
-
+/* Do not change! */
 #define sl_STRQT(s) #s
 #define sl_STRFY(s) um_STRQT(s)
-
-#define sl_NOSIZE ((size_t)-1)
-#define sl_NOPOINT ((long int)0xffffffffL)
-#define sl_NOCMP (-2)
-
-#define sl_MODEMASK (0x000F)
-#define sl_READ     (0x0001)
-#define sl_WRITE    (0x0002)
-#define sl_BINARY   (0x0004)
-#define sl_PREPEND  (0x0008)
-
-#define sl_CTYPE (0x2fff) /**< The valid range of ctype flags. */
-#define sl_ALPHA (0x0001) /**< An alphanumeric character. */
-#define sl_DIGIT (0x0002) /**< A digit. */
-#define sl_XDIGT (0x0004) /**< A hexadecimal digit. */
-#define sl_CNTRL (0x0008) /**< A control character. */
-#define sl_GRAPH (0x0010) /**< A graphical character. */
-#define sl_PRINT (0x0020) /**< A printable character. */
-#define sl_PUNCT (0x0040) /**< A punctuation character. */
-#define sl_SPACE (0x0080) /**< A space character, including newlines and tabs. */
-#define sl_NEWLN (0x0100) /**< A newline character. */
-#define sl_UPPER (0x0200) /**< An uppercase letter. */
-#define sl_LOWER (0x0400) /**< A lowercase letter. */
-#define sl_EOS   (0x0800) /**< End-of-stream (file, buffer, string, etc). */
-#define sl_VALID (0x1000) /**< If a character is valid, this MAY BE set if the character is of no other ctype. */
-#define sl_SLENC (0x2000) /**< A valid "SL" locale character. */
-
-#define sl_ISCTYPE(t, x) ( ((x) & (t)) != 0 )
-#define sl_ISALPHA(x)    ( sl_ISCTYPE(sl_ALPHA, x) )
-#define sl_ISDIGIT(x)    ( sl_ISCTYPE(sl_DIGIT, x) )
-#define sl_ISXDIGT(x)    ( sl_ISCTYPE(sl_XDIGT, x) ) /**< Implies @c sl_ISALNUM(x) */
-#define sl_ISALNUM(x)    ( sl_ISALPHA(x) && sl_ISDIGIT(x) )
-#define sl_ISCNTRL(x)    ( sl_ISCTYPE(sl_CNTRL, x) ) /**< Implies @code !sl_ISALNUM(x) && !sl_ISPUNCT(x) @endcode */
-#define sl_ISGRAPH(x)    ( sl_ISCTYPE(sl_GRAPH, x) )
-#define sl_ISPRINT(x)    ( sl_ISCTYPE(sl_PRINT, x) )
-#define sl_ISPUNCT(x)    ( sl_ISCTYPE(sl_PUNCT, x) ) /**< Implies @c !sl_ISALNUM(x) */
-#define sl_ISSPACE(x)    ( sl_ISCTYPE(sl_SPACE, x) )
-#define sl_ISNEWLN(x)    ( sl_ISCTYPE(sl_NEWLN, x) ) /**< Implies @c sl_ISSPACE(x) */
-#define sl_ISUPPER(x)    ( sl_ISCTYPE(sl_UPPER, x) ) /**< Implies @c sl_ISALPHA(x) */
-#define sl_ISLOWER(x)    ( sl_ISCTYPE(sl_LOWER, x) ) /**< Implies @c sl_ISALPHA(x) */
-#define sl_ISVALID(x)    ( sl_ISANY(x) || sl_ISCTYPE(sl_VALID, x) )
-#define sl_ISSLENC(x)    ( sl_ISCTYPE(sl_SLENC, x) )
-#define sl_ISEOS(x)      ( sl_ISCTYPE(sl_EOS,   x) )
-#define sl_ISANY(x)      ( sl_ISCTYPE(sl_CTYPE, x) )
-#define sl_ISNONE(x)     !sl_ISANY(x)
-
-
-/* Do not change! */
 #define sl_RELEASENAME sl_NAME \
 	" " sl_STRFY(sl_MAJORVERSION) \
 	"." sl_STRFY(sl_MINORVERSION) \
@@ -147,344 +31,518 @@ Extra types:
 	"-" sl_RELEASETYPE
 
 
-#if !defined(sl_STATIC) && defined(_WIN32)
-#   define sl_FIMPORT __declspec(dllimport)
-#   define sl_FEXPORT __declspec(dllexport)
-#   define sl_DIMPORT sl_FIMPORT
-#   define sl_DEXPORT sl_FEXPORT
-#else
-#   define sl_FIMPORT extern
-#   define sl_FEXPORT
-#   define sl_DIMPORT sl_FIMPORT
-#   define sl_DEXPORT
-#endif
-
-
-#if defined(sl_BUILDING)
-#   define sl_API sl_FEXPORT
-#   define sl_DATA sl_DEXPORT
-#   if defined(sl_STATIC)
-#       define sl_IAPI static
-#       define sl_IDATA
-#   else
-#       if defined(__GNUC__) && ((__GNUC__*100 + __GNUC_MINOR__) >= 302) && \
-                defined(__ELF__)
-#           define sl_IAPI __attribute__((visibility("hidden"))) extern
-#           define sl_IDATA sl_IAPI
-#       else
-#           define sl_IAPI extern
-#           define sl_IDATA extern
-#       endif
-#   endif
-#else
-#   define sl_API sl_FIMPORT
-#   define sl_DATA sl_DIMPORT
-#endif
-
-
-/*##############################################################################
- * [[[   ENUMERATIONS   ]]]
+/*
+ * [ [ [ MACROS AND DEFINITIONS ] ] ] ==========================================
  */
 
 
-typedef enum sl_EEcode {
-	  sl_ERRPART = -2
-	, sl_ERREOS = -1
-	, sl_OK
-	, sl_ERROR
-	, sl_ERRSUP
-	, sl_ERRMEM
-	, sl_ERRSYN
-	, sl_ERRCNV
-	, sl_ERRENC
-} sl_EEcode;
+/* Generic macros */
+#define sl_ISFLAG(t, x) ( ((x) & (t)) != 0 )
+
+/* Tri-boolean states */
+#define sl_yes             (1)
+#define sl_maybe           (0)
+#define sl_no              (-1)
+#define sl_true            (1)
+#define sl_false           (0)
+
+/* Tri-boolean testing (NOT supposed to be used slbool) */
+#define sl_YES(x)          ((x) > 0)
+#define sl_NO(x)           ((x) < 0)
+#define sl_TRUE            sl_YES
+#define sl_FALSE(x)        ((x) <= 0)
+#define sl_MAYBE(x)        ((x) == 0)
+#define sl_SURE(x)         ((x) != 0)
+
+/* Error code testing */
+#define sl_OK(c)           ((c) == sl_E_OK)
+#define sl_ERANGE(c)       ((c) >= sl_E_MIN && (c) <= sl_E_MAX)
+#define sl_VALID(c)        ((c) <= sl_E_OK)
+#define sl_WARN(c)         ((c) < sl_E_OK)
+#define sl_ERROR(c)        ((c) > sl_E_OK)
+#define sl_EOS(c)          ((c) == sl_E_END)
+#define sl_EOF(c)          sl_eos(c)
+
+/* Iteration modes */
+#define sl_W_IS(t, x)      sl_ISFLAG((t), (x) & sl_W_MASK)
+#define sl_W_MASK          (0x000F)
+#define sl_W_PERMASK       (0x0007) /**< Mask for the iteration mode flags. */
+#define sl_W_PERCODE       (0x0001) /**< Iteration is done per code point. This is generally the default mode. */
+#define sl_W_PERCHAR       (0x0002) /**< Iteration is done per character. This means that the walker may return more than one codepoint per iteration, so long as it forms a complete character with the combination of all returned codepoints. */
+#define sl_W_PERUNIT       (0x0003) /**< Iteration is done per code unit (e.g. char, wchar_t), disregarding codepoint completeness. */
+#define sl_W_REVERSE       (0x0008) /**< Iteration is done in reverse order, from last to first. */
+
+/* Stream opening modes */
+#define sl_M_IS(t, x)      sl_ISFLAG((t), (x) & sl_M_MASK)
+#define sl_M_MASK          (0x00FF)
+#define sl_M_RWMASK        (0x0003)
+#define sl_M_READ          (0x0001)
+#define sl_M_WRITE         (0x0002)
+#define sl_M_RW            (sl_M_READ | sl_M_WRITE)
+#define sl_M_APPEND        (0x0004)
+#define sl_M_BINARY        (0x0008)
+#define sl_M_UPDATE        (0x0010)
+#define sl_M_CREATE        (0x0020)
+#define sl_M_ORIENTEDMASK  (0x00C0)
+#define sl_M_CHARORIENTED  (0x0040)
+#define sl_M_WIDEORIENTED  (0x0080)
+#define sl_M_ENCORIENTED   (0x00C0)
+
+/* Buffering modes */
+#define sl_B_IS(t, x)  sl_ISFLAG((t), (x) & sl_B_MASK)
+#define sl_B_MASK          (0x000F)
+#define sl_B_PERFLAGS      (0x0007)
+#define sl_B_NOBUF         (0x0001) /**< Deactivates buffering. */
+#define sl_B_NATIVE        (0x0002) /**< Enforces default buffering behaviour from the underlying library used to implement the stream. The user has no control over the buffering mechanisms through the library's API. */
+#define sl_B_FULL          (0x0003)
+#define sl_B_PERLINE       (0x0004)
+#define sl_B_PERCHAR       (0x0005)
+
+/* Char types */
+#define sl_C_MASK          (0x1fff) /**< The valid range of ctype flags. */
+#define sl_C_SPACE         (0x0080) /**< A space character, including newlines and tabs. */
+#define sl_C_CNTRL         (0x0008) /**< A control character. */
+#define sl_C_PRINT         (0x0020) /**< A printable character. */
+#define sl_C_UPPER         (0x0200) /**< An uppercase letter. */
+#define sl_C_LOWER         (0x0400) /**< A lowercase letter. */
+#define sl_C_ALPHA         (0x0001) /**< An alphanumeric character. */
+#define sl_C_DIGIT         (0x0002) /**< A digit. */
+#define sl_C_PUNCT         (0x0040) /**< A punctuation character. */
+#define sl_C_XDIGT         (0x0004) /**< A hexadecimal digit. */
+#define sl_C_NEWLN         (0x0100) /**< A newline character. Usage may vary depending on locale and stream type. */
+#define sl_C_EOS           (0x0800) /**< End-of-stream (file, buffer, string, etc). */
+#define sl_C_VALID         (0x1000) /**< If a character is valid, this MAY BE set if the character is of no other ctype. */
+#define sl_C_ALNUM         (sl_C_ALPHA | sl_C_DIGIT)
+#define sl_C_GRAPH         (sl_C_ALNUM | sl_C_PUNCT) /**< A graphical character. */
+
+/* Character type testing */
+#define sl_C_IS(t, x)  sl_C_ISFLAG((t), (x) & sl_C_MASK)
+#define sl_C_ISALPHA(x)    ( sl_C_IS(sl_C_ALPHA, x) )
+#define sl_C_ISDIGIT(x)    ( sl_C_IS(sl_C_DIGIT, x) )
+#define sl_C_ISXDIGT(x)    ( sl_C_IS(sl_C_XDIGT, x) )
+#define sl_C_ISALNUM(x)    ( sl_C_ISALPHA(x) && sl_C_ISDIGIT(x) )
+#define sl_C_ISCNTRL(x)    ( sl_C_IS(sl_C_CNTRL, x) )
+#define sl_C_ISGRAPH(x)    ( sl_C_IS(sl_C_GRAPH, x) )
+#define sl_C_ISPRINT(x)    ( sl_C_IS(sl_C_PRINT, x) )
+#define sl_C_ISPUNCT(x)    ( sl_C_IS(sl_C_PUNCT, x) )
+#define sl_C_ISSPACE(x)    ( sl_C_IS(sl_C_SPACE, x) )
+#define sl_C_ISNEWLN(x)    ( sl_C_IS(sl_C_NEWLN, x) )
+#define sl_C_ISUPPER(x)    ( sl_C_IS(sl_C_UPPER, x) )
+#define sl_C_ISLOWER(x)    ( sl_C_IS(sl_C_LOWER, x) )
+#define sl_C_ISVALID(x)    ( sl_C_ISANY(x) || sl_C_IS(sl_C_VALID, x) )
+#define sl_C_ISEOS(x)      ( sl_C_IS(sl_C_EOS,   x) )
+#define sl_C_ISANY(x)      ( sl_C_IS(sl_C_MASK, x) )
+#define sl_C_ISNONE(x)     !sl_C_ISANY(x)
 
 
-typedef enum sl_ENature_ {
-
-	  sl_NAT_NONE   /**< The stream has no specific nature. */
-	, sl_NAT_FILTER /**< The stream is a converter between traits. */
-	, sl_NAT_BUFFER /**< The stream is buffered. */
-	, sl_NAT_FILE   /**< The stream is a file handle. */
-	, sl_NAT_STRING /**< The stream implements a string object. */
-
-	/* ... */
-
-	, sl_NAT_MAX
-} sl_ENature;
-
-
-/*##############################################################################
- * [[[   TYPE DEFINITIONS   ]]]
+/*
+ * [ [ [ TYPE DEFINITIONS ] ] ] ================================================
  */
+
+
+/* Aliases */
+#define slenum            int         /**< Alias for an int intended to hold an enumeration value. */
+#define sltbool           int         /**< Alias for an int intended to hold a tri-state boolean value. */
+#define slbool            int         /**<  */
+#define slecode           int         /**< Alias for an int intended to be a substitute for the @a slecode_e type. */
+#define slctypes          slflags_t   /**< Alias for a slflags_t type intended to hold character type flags. */
+
+/* Enumerations */
+typedef enum slecode_e    slecode_e;  /**< Error code enumeration. Negative values are informational or warnings, while positive ones are errors. */
+typedef enum slhtype_e    slhtype_e;  /**< Enumeration that lists all of the library's handle types. */
 
 /* Immediate types */
-typedef unsigned int sl_Ctypes;      /**< An integer with flags describing a character's types. */
-typedef long int     sl_Cpoint;      /**< An encoding's code point. */
-typedef long int     sl_Off;         /**< A type representing an offset starting from a position. */
+typedef long int          slcpoint_t; /**< Type for a signed integer representing a single codepoint. Equivalent to the usage of int in C-style string functions. Depending on the encoding, a character may be composed of more than just one codepoint. This type has at least 32 bits. */
+typedef long int          sloff_t;    /**< Type for positional offsets. Though it may not be big enough to represent an integer capable of instructing operations to seek from beginning to end, for most applications it may suffice, and when not, two or more consecutive seeks can be performed to reach the desired position. */
+typedef unsigned int      slflags_t;  /**< A simple formalism for an integer supposed to hold bitwise flags. It is guaranteed to hold at least 16 bits. */
 
-/* Base types */
-typedef struct sl_Ctrait_ sl_Ctrait; /**< The encoding itself. */
-typedef struct sl_Cconv_  sl_Cconv;  /**< An encoding conversion object. */
+/* Essential types */ 
+typedef struct slapi_t    slapi_t;    /**< Base for all other API definitions. */
+typedef struct slhnd_t    slhnd_t;    /**< A handle that (semi-)opaquely represents any library-supported object. */
+typedef struct slopts_t   slopts_t;   /**< Simple POD structure used to pass standardized options on handle creation. */
+typedef struct slenc_t    slenc_t;    /**< Represents and implements an encoding (e.g. codepage, etc). */
+typedef struct slhandle_a slhandle_a; /**< An API capable of generating handles. */
 
-/* Environment */
-typedef struct sl_Stream_ sl_Stream; /**< The base stream object. */
-typedef struct sl_Pos_    sl_Pos;    /**< An object representing a position inside a stream. */
-
-/* Streams */
-typedef struct sl_StreamApi_ sl_StreamApi;
-typedef struct sl_State_     sl_State;
-typedef struct sl_Opts_      sl_Opts;
-
-/* Natures */
-typedef struct sl_FilterState_  sl_FilterState;
-typedef struct sl_FilterNature_ sl_FilterNature;
-typedef struct sl_BufferState_  sl_BufferState;
-typedef struct sl_BufferNature_ sl_BufferNature;
-typedef struct sl_FileState_    sl_FileState;
-typedef struct sl_FileNature_   sl_FileNature;
-typedef struct sl_StringState_  sl_StringState;
-typedef struct sl_StringNature_ sl_StringNature;
-
-/* Options */
-typedef struct sl_StringOpts_   sl_StringOpts;
-typedef struct sl_StdfileOpts_  sl_StdfileOpts;
-typedef struct sl_FileOpts_     sl_FileOpts;
-
-/* Function signatures */
-typedef int       (*sl_FEvent)  (void* state, sl_EEcode ecode, sl_Stream* S, sl_Pos* P);
-typedef void*     (*sl_FAlloc)  (void* allocp, void* ptr, size_t sz, size_t align);
-typedef sl_Cconv* (*sl_FCcopen) (sl_Ctrait* from, sl_Ctrait* to, sl_FAlloc allocf, void* allocp);
+/* Delegates and signatures */
+typedef slecode_e (*slevent_f)  (void* eventp, int what, slhnd_t* who, const char* where, void* ctx); /* Return: <0 - partially recovered, but should continue; =0 - fully recovered, must continue; >0 - not recovered, must abort */
+typedef slecode_e (*slfilter_f) (void* filterp, slhnd_t* filterh, size_t* nchars, const char* ibuf, size_t ibufbytesz, char* obuf, size_t* obufbytesz); /* Return: <0 - Nothing to do. =0 - OK. >0 - Error. Specific error code will be put on filterh. */
+typedef void*     (*slalloc_f)  (void* allocp, void* ptr, size_t sz);
 
 
-/*##############################################################################
- * [[[   BASIC STRUCTS AND UNIONS   ]]]
+/*
+ * [ [ [ ENUMERATIONS ] ] ] ====================================================
  */
 
 
-struct sl_Cconv_ {
-
-	sl_Ctrait*  from_enc;
-	sl_Ctrait*  to_enc;
-	const char* from;
-	char*       to;
-	char*       from_pos;
-	char*       to_pos;
-	size_t      from_sz;
-	size_t      to_sz;
-
-	sl_EEcode (*step)    (sl_Cconv* conv, size_t step);
-	sl_EEcode (*dispose) (sl_Cconv* conv);
+/* Errors as positive numbers.
+ * Warnings and events as negative numbers.
+ */
+enum slecode_e {
+    sl_E_USERWARN=-256,/**< Starting number for user-defined warnings. */
+	
+    sl_E_READY = -6,    /**< Indicates that the stream is ready to be used. */
+    sl_E_DATA,          /**< A code indicating presence or traffic of data in the stream. */
+	sl_E_AGAIN,         /**< Resource still unavailable, try again. */
+	sl_E_PASS,          /**< There is nothing to do, the operation is being ignored. */
+	sl_E_UNREG,         /**< The event handler or any other similar entity is being unregistered. */
+    sl_E_WARN,          /**< Generic warning indicator. May be raised after error recovery. */
+    sl_E_END,            /**< Indicates end-of-stream states (EOF and all the like). */
+	
+    sl_E_OK,            /**< Operation successful. */
+	
+	sl_E_RR,            /**< Generic error indicator. */
+	sl_E_IMPL,          /**< Operation not implemented or not provided. */
+	sl_E_SUPP,          /**< Operation not supported. */
+	sl_E_ARGS,          /**< Wrong arguments provided. */
+	
+	sl_E_USERERR = 256,/**< Starting number for user-defined errors. */
+	
+	sl_E_MIN = sl_E_DATA,
+	sl_E_MAX = sl_E_ARGS
 };
 
 
-struct sl_Ctrait_t {
-
-	const sl_Ctrait* base;
-	const char*      name;
-    const size_t     minsize;
-    const size_t     maxsize;
-    const sl_Cpoint  eof;
-
-    size_t    (*seek)    (sl_Ctrait* T, char *s, size_t sz, sl_Off off, char **pos);
-    sl_Cpoint (*cpoint)  (sl_Ctrait* T, char *s, size_t sz);
-    size_t    (*tostr)   (sl_Ctrait* T, sl_Cpoint cpoint, char *s, size_t sz);
-    sl_Ctypes (*ctypes)  (sl_Ctrait* T, sl_Cpoint cpoint);
-    sl_Cpoint (*tolower) (sl_Ctrait* T, sl_Cpoint cpoint);
-    sl_Cpoint (*toupper) (sl_Ctrait* T, sl_Cpoint cpoint);
-    int       (*cmp)     (sl_Ctrait* T, const char* a, size_t a_sz, const char* b, size_t b_sz);
-    size_t    (*xfrm)    (sl_Ctrait* T, const char* from, size_t from_sz, char* to, size_t to_sz);
+enum slhtype_e {
+    sl_T_NONE,        /* - */ /**< The handle type is invalid, indiscernible or irrelevant. */
+	
+	/* (real) Types (although they're actually used as interfaces...) */
+	sl_T_HANDLE,      /* _ */ /**< generic methods that must apply for all handle types. */
+	sl_T_STREAM,      /* _ */ /**< handle is a stream. */
+	sl_T_POS,         /* _ */ /**< handle is a stream position. */
+	sl_T_WALKER,      /* c */ /**< handle is an encoding walker state. */
+	sl_T_CCONV,       /* c */ /**< handle is an encoding conversion state. */
+	sl_T_LOCALE,      /* l */ /**< handle is a locale. A locale has facets (that in this library are merely sub-locales). */
+	sl_T_WRAPCALL,    /* w */ /**< handle is an asynchronous call handle. */
+	sl_T_FILTER,      /* b */ /**< handle works as a stream filter for another stream. */
+	sl_T_BUFFER,      /* b */ /**< handle works as a stream buffer, either standalone or proxied. */
+	sl_T_FILE,        /* f */ /**< handle works as a file. */
+	sl_T_STRING,      /* s */ /**< handle works as an in-memory string, dynamic or not. */
+		
+	/* Natures (in reality, just a cute term for Java-like interfaces) */
+	sl_T_READABLE,    /* _ */ /**< handle is a readable stream. */
+	sl_T_WRITABLE,    /* _ */ /**< handle is a writable stream. */
+	sl_T_SEEKABLE,    /* _ */ /**< handle is a seek-enabled stream. */
+	sl_T_ASYNC,       /* _ */ /**< handle has an asynchronous operation, or is asynchronous-aware. */
+	sl_T_NOTIFIER,    /* _ */ /**< handle can emit events and register event handlers. Based on callbacks. */
+	sl_T_LOCAWARE,    /* _ */ /**< handle can be localized. */
+	sl_T_ENCAWARE,    /* _ */ /**< handle operates following an encoding. */
+	sl_T_WRAPPABLE,   /* _ */ /**< handle is capable of wrapping calls into handlers. */
+	
+	/* Locale facets */
+	sl_T_LCONV,       /* l */ /**< Defines the locale's default encoding and character data for the locale (lconv). Assigning an encoding different from that specified in the locale on a stream may incur an implicit conversion. */
+	sl_T_LCOLLATE,
+	sl_T_LMONETARY,
+	sl_T_LNUMERIC,
+	sl_T_LTIME,
+	
+	sl_T_MAX = sl_T_LTIME
 };
 
 
-struct sl_Stream_ {
-
-	sl_StreamApi* api;
-	sl_Ctrait*    enc;
-};
-
-
-struct sl_Pos_ {
-
-    sl_Stream* stream;
-    int        aligned;
-
-    void (*dispose) (sl_Pos* pos);
-};
-
-
-struct sl_Opts_ {
-
-	sl_FAlloc    allocf;
-	void*        allocp;
-	sl_FEvent    eventf;
-	void*        eventp;
-	unsigned int mode;
-};
-
-
-struct sl_State_ {
-
-	unsigned int mode;
-};
-
-
-struct sl_StreamApi_ {
-
-	sl_StreamApi* base;
-
-	const char*       (*getimplname)   (sl_StreamApi* A);
-	const sl_ENature* (*getnatures)    (sl_StreamApi* A);
-	void**            (*getnatureapis) (sl_StreamApi* A);
-
-	sl_Stream* (*openwith) (sl_StreamApi* A, sl_Opts* opts);
-	sl_Stream* (*reopen)   (sl_StreamApi* A, sl_Stream* S, sl_Opts* opts);
-	sl_EEcode  (*close)    (sl_StreamApi* A, sl_Stream* S);
-	sl_State*  (*getstate) (sl_StreamApi* A, sl_Stream* S, sl_State* state);
-
-	size_t     (*read)     (sl_StreamApi* A, sl_Stream* S, char* buf, size_t sz, size_t nchars);
-	size_t     (*write)    (sl_StreamApi* A, sl_Stream* S, char* buf, size_t sz, size_t nchars);
-	int        (*flush)    (sl_StreamApi* A, sl_Stream* S);
-
-	sl_Pos*    (*getpos)   (sl_StreamApi* A, sl_Stream* S);
-	sl_EEcode  (*setpos)   (sl_StreamApi* A, sl_Stream* S, sl_Pos* pos);
-	sl_EEcode  (*tell)     (sl_StreamApi* A, sl_Stream* S, sl_Off* off);
-	sl_EEcode  (*seek)     (sl_StreamApi* A, sl_Stream* S, sl_Off off, int where);
-};
-
-
-/*##############################################################################
- * [[[   FILTER STRUCTS AND UNIONS   ]]]
+/*
+ * [ [ [ STRUCTURES AND UNIONS ] ] ] ===========================================
  */
 
 
-struct sl_FilterState_ {
-
-	sl_State state;
-	sl_Stream* base;
+struct slopts_t {
+    slapi_t*        api;     /**< API that created the additional information stored at @c apip. */
+    void*           apip;    /**< Used by APIs for holding information not contemplated by the structure. When this field is set, the user can consider that the API indicated by the @c api variable has set at least one custom option. */
+	
+	/* General/Reusable options */
+	slhnd_t*        hnd;     /**< Handle to be used in the operation. */
+	slenum          mode;    /**< Enumeration-like integer holding the mode or operation to be performed. */
+	slflags_t       flags;   /**< Operation flags specifying some details. */
+	slcpoint_t      cpoint;  /**< A code point to use on the operation. */
+	slctypes_t      ctypes;
+	size_t          size;
+	const char*     name;
+	const wchar_t*  wname;
+	slhnd_t*        hname;
+    void*           eventp;
+    slevent_f       eventf;
+	void*           allocp;
+	slalloc_f       allocf;	
+	sltbool         autoquit; /**< For proxy-type streams (e.g. filter, buffer), if @c sl_yes, their proxied streams are closed when they are. */
+	sltbool         async;    /**< Option used to force synchronous or asynchronous operation on streams. Set to @c sl_yes to enable asynchronous functionality, and @c sl_false to force synchronization. */
+	
+	/* Stream options */
+    const char*     encname;
+    const slenc_t*  enc;
+	const char*     locname;
+	const slhnd_t*  loc;
+	
+	/* Filter and Converter options */
+	slfilter_f      filterf;
+	void*           filterp;
+	slenc_t*        fromenc;
+	const char*     fromencname;
+	
+	/* Event notification options */
+	int             evtsignal;
 };
 
 
-struct sl_FilterNature_ {
-
-	sl_FilterState*  (*getstate)    (sl_FilterNature* A, sl_Stream* S, sl_FilterState* state);
-};
-
-
-sl_API sl_FilterState* sl_getfilterstate(sl_Stream* S, sl_FilterState* state);
-
-
-/*##############################################################################
- * [[[   BUFFER STRUCTS AND UNIONS   ]]]
+/*
+ * [ [ [ GLOBAL METHODS ] ] ] ==================================================
+ *
+ * Some utility methods used to help both users and implementors of the library.
  */
 
 
-struct sl_BufferState_ {
-
-	sl_State state;
-	size_t sz;
-	size_t cap;
-};
+sl_API int            sl_toerrno  (int ecode);
+sl_API slopts_t*      sl_initopts (slopts_t* opts, const slapi_t* api);
 
 
-struct sl_BufferNature_ {
-
-	sl_BufferState*  (*getstate)    (sl_BufferNature* A, sl_Stream* S, sl_BufferState* state);
-};
-
-
-sl_API sl_BufferState* sl_getbufferstate(sl_Stream* S, sl_BufferState* state);
-
-
-/*##############################################################################
- * [[[   FILE STRUCTS AND UNIONS   ]]]
+/*
+ * [ [ [ GENERIC HANDLE METHODS ] ] ] ==========================================
+ *
+ * A handle is a formalism for an object with pre-defined interfaces that the
+ * library calls APIs (and that the rest of the world would call classes).
+ * Handles may implement any of the APIs listed in the @c slhtype_e enumeration.
+ * However, handles are enforced to implement at least the @c sl_T_HANDLE
+ * interface API, that provides the minimum information and methods required
+ * for handle-based operations (e.g. primary type (the "constructor"), resource
+ * deallocation methods).
+ *
+ * Handles are also required to provide an errno-like state that's query-able by
+ * clients. It is hoped that this design promotes (actually, allows for)
+ * reentrant handle implementations. The rationale behind these internal states
+ * is given by that of @c slecode_e, and is as such:
+ * + Zero indicates a valid state.
+ * + Positive values indicate error states.
+ * + Negative values indicate warnings or events of interest to the client.
+ * + Values less than @c sl_E_USERWARN are non-standard and represent
+ *   implementation-defined warnings/events.
+ * + Values greater than @c sl_E_USERERR are non-standard and represent
+ *   implementation-defined errors.
+ * Given an error state, the user may try to recover the handle into a valid
+ * state through @c sl_recover.
  */
 
 
-struct sl_FileState_ {
-
-	sl_State       state;
-	const char*    path;
-	const wchar_t* wpath;
-	long int       fhandle;
-	void*          fptr;
-};
+#define               sl_ok(c)    sl_OK(sl_ecode(c))
+#define               sl_valid(c) sl_VALID(sl_ecode(c))
+#define               sl_warn(c)  sl_WARN(sl_ecode(c))
+#define               sl_error(c) sl_ERROR(sl_ecode(c))
+#define               sl_eos(hnd) sl_EOS(sl_ecode(c))
+#define               sl_eof(hnd) sl_EOF(sl_ecode(c))
 
 
-struct sl_FileNature_ {
-
-	sl_FileState*  (*getstate)    (sl_FileNature* A, sl_Stream* S, sl_FileState* state);
-};
-
-
-sl_API sl_FileState* sl_getfilestate(sl_Stream* S, sl_FileState* state);
+sl_API int            sl_htype   (slhnd_t* hnd);
+sl_API int            sl_ishtype (slhnd_t* hnd, int htype);
+sl_API slecode_e      sl_ecode   (slhnd_t* hnd);
+sl_API slecode_e      sl_recover (slhnd_t* hnd);
+sl_API void           sl_close   (slhnd_t* hnd);
 
 
-/*##############################################################################
- * [[[   STRING STRUCTS, UNIONS AND APIS   ]]]
+/*
+ * [ [ [ STREAM METHODS ] ] ] ==================================================
+ *
+ * Streams have a central place in the library. @c sl_T_STREAM enumeration item
+ * is the API ID for the stream interface. The enumeration item itself serves to
+ * identify the handle as being a stream instance. The stream interface
+ * itself is very barebones, as the library considers that not every stream may
+ * provide all the functionality the library makes available to the client. In
+ * such cases, the library will inspect the handle for proper support.
  */
 
 
-struct sl_StringState_ {
+/* General functions */
+sl_API slhnd_t*       sl_open      (const slhandle_a* api, const slopts_t* opts);
+sl_API slecode_e      sl_flush     (slhnd_t* hnd); /**< Finishes any pending operations on stream. The most common example is buffer flushing, but the same concept can be extended to other actions (e.g. operation flushing if the stream queues operations). */
 
-	sl_Opts opts;
-	size_t sz;
-	size_t cap;
-};
+/* Encoding-aware (character type) functions */
+sl_API const slenc_t* sl_getenc    (slhnd_t* hnd);
+sl_API slecode_e      sl_setenc    (slhnd_t* hnd, const slenc_t* enc);
+sl_API const char*    sl_getencname(slhnd_t* hnd);
+sl_API slecode_e      sl_setencname(slhnd_t* hnd, const char* encname);
+
+/* Locale-aware functions. */
+sl_API const slhnd_t* sl_getloc    (slhnd_t* hnd);
+sl_API slecode_e      sl_setloc    (slhnd_t* hnd, const slhnd_t* loc);
+sl_API const char*    sl_getlocname(slhnd_t* hnd);
+sl_API slecode_e      sl_setlocname(slhnd_t* hnd, const char* locname);
+
+/* Output functions */
+sl_API slcpoint_t     sl_ungetc    (slhnd_t* hnd, slcpoint_t ch);
+sl_API slcpoint_t     sl_putc      (slhnd_t* hnd, slcpoint_t cpoint);
+sl_API long           sl_puts      (slhnd_t* hnd, const char* str);
+sl_API long           sl_putl      (slhnd_t* hnd, const char* str);
+sl_API long           sl_putn      (slhnd_t* hnd, const char* str, size_t bytesz);
+sl_API long           sl_putnl     (slhnd_t* hnd, const char* str, size_t bytesz);
+sl_API long           sl_printf    (slhnd_t* hnd, const char* fmt, ...);
+sl_API long           sl_vprintf   (slhnd_t* hnd, const char* fmt, va_list args);
+sl_API long           sl_write     (slhnd_t* hnd, slhnd_t* fromstream, size_t nchars);
+sl_API long           sl_writebuf  (slhnd_t* hnd, const char* buf, size_t sz, size_t nchars);
+
+/* Input functions */
+sl_API slecode_e      sl_pipe      (slhnd_t* readable, slhnd_t* writable); /**< Available readable data on @c readable is read and then written to @c writable as soon as it arrives. */
+sl_API slecode_e      sl_tie       (slhnd_t* readable, slhnd_t* stream); /**< @c stream is flushed before any read operation on @c readable. */
+sl_API slcpoint_t     sl_getc      (slhnd_t* hnd);
+sl_API slecode_e      sl_gets      (slhnd_t* hnd, char* buf, size_t bytesz);
+sl_API slecode_e      sl_get0      (slhnd_t* hnd, char* buf, size_t bytesz); /**< Gets a string up to the first null character found, including any character in-between. */
+sl_API slecode_e      sl_scanf     (slhnd_t* hnd, const char* fmt, ...);
+sl_API size_t         sl_vscanf    (slhnd_t* hnd, const char* fmt, va_list args);
+sl_API slecode_e      sl_read      (slhnd_t* hnd, slhnd_t* tostream, size_t nchars);
+sl_API size_t         sl_readbuf   (slhnd_t* hnd, char* buf, size_t bufsz, size_t nchars);
+
+/* Seek and Positioning */
+sl_API ssize_t        sl_seek      (slhnd_t* hnd, sloff_t off, int where);
+sl_API slhnd_t*       sl_getpos    (slhnd_t* hnd);
+sl_API slecode_e      sl_setpos    (slhnd_t* hnd, slhnd_t* pos);
 
 
-struct sl_StringNature_ {
-
-	sl_StringState*  (*getstate)    (sl_StringNature* A, sl_Stream* S, sl_StringState* state);
-};
-
-
-sl_API sl_StringState* sl_getstringstate(sl_Stream* S, sl_StringState* state);
-
-
-/*##############################################################################
- * [[[   EXTERNAL DATA   ]]]
+/*
+ * [ [ [ ENCODING FUNCTIONS ] ] ] ==============================================
+ *
+ * These are functions that operates on encodings and their instances.
+ * Encoding objects are capable of 
+ *
+ * Walkers are encoding-based objects that walk through a buffer, codepoint by
+ * codepoint. Note that, depending on the encoding, Some considerations about encoding walkers:
+ * + Conceptually, walkers are not streams, and therefore, they may not be
+ *   operated as such. Although implementations may return a walker handle that
+ *   is streamable, it is not recommended.
+ * + Walkers are primarily read-only. They should never alter the input buffer
+ *   in any way -- unless the walker handle is a streamable object, it's all
+ *   up to the implementation.
+ * + The speed of the walking can be specified through the number of
+ *   characters to walk by -- and in fact implementations are free to optimize
+ *   these cases.
+ * + As walkers operate with in-memory objects, they must be provided
+ *   a raw byte-oriented pointer and its size. Walkers internally maintain a
+ *   pointer used to hold its current position in the buffer, and the user can
+ *   inspect said pointer. Walkers can be stateful, but that's not a rule.
+ * + Walkers may be stateful, if the encoding is complex enough.
+ * + Information a walker must provide:
+ *   - initial position
+ *   - current position
+ *   - remaining size
+ *   - current code point's size
+ *
+ * Code converters 
  */
 
 
-struct sl_StringOpts_ {
+/* Encoding functions */
+sl_API 
 
-	sl_Opts opts;
-	size_t  cap;
-};
+/* Walker functions */
+sl_API slhnd_t*       sl_cwalk     (slhnd_t* hnd, int mode, const char* buf, size_t bufsz, const slopts_t* opts);
+sl_API const char*    sl_cstartpos (slhnd_t* walker); /**< Returns the starting pointer of the walker. */
+sl_API ssize_t        sl_cstartlen (slhnd_t* walker); /**< Returns the full byte length of the buffer being walked on. */
+sl_API const char*    sl_ccurrpos  (slhnd_t* walker); /**< Returns the current position pointer. It always points to the beginning of a valid character. */
+sl_API ssize_t        sl_ccurrlen  (slhnd_t* walker); /**< Returns the byte length of the character pointed by the current walker position. */
+sl_API ssize_t        sl_cremlen   (slhnd_t* walker); /**< Returns the remaining byte length of the walker buffer. */
+sl_API ssize_t        sl_cseek     (slhnd_t* hnd, sloff_t* off, int where);
 
-
-struct sl_StdfileOpts_ {
-
-	sl_Opts     opts;
-	const char* path;
-};
-
-
-struct sl_FileOpts_ {
-
-	sl_Opts opts;
-	const char*    path;
-	const wchar_t* wpath;
-};
+/* Code converter functions */
+sl_API slhnd_t*       sl_cconvert  (slenc_t* from, slenc_t* to, slopts_t* opts);
+sl_API ssize_t        sl_cstep     (slhnd_t* cnv, size_t nchars);
 
 
-sl_DATA const sl_StreamApi* const sl_stdfile;
-sl_DATA const sl_StreamApi* const sl_cstring;
-sl_DATA const sl_StreamApi* const sl_file;
-
-sl_DATA const sl_Ctrait* const sl_ctrait_ascii;
-sl_DATA const sl_Ctrait* const sl_ctrait_slenc;
-sl_DATA const sl_Ctrait* const sl_ctrait_char;
-sl_DATA const sl_Ctrait* const sl_ctrait_wchar;
+/* Walker and code converter functions */
+sl_API slecode_e      sl_cinit     (slhnd_t* cnv); /**< Initializes the walker or converter state. */
+sl_API slecode_e      sl_cisinit   (slhnd_t* cnv); /**< Checks if the walker or converter is in its initial state. */
 
 
-/*##############################################################################
- * [[[   UTILITY API   ]]]
+/*
+ * [ [ [ EVENT FUNCTIONS ] ] ] =================================================
+ * 
+ * Event handling functions are called when a specific event is raised during
+ * any stream operation. Events can be either notifications, warnings or errors.
+ * When an error is being treated, the event handler is able to tell the stream
+ * whether it can skip, retry or abort the operation. Event handling happens
+ * only once when the event is raised; specifically, error handling happens only
+ * once so that the stream doesn't try to redo an ever-failing operation.
+ *
+ * If the stream supports event handling, it must support at least the "global"
+ * event handler. The global handler is capable of catching any event that does
+ * not have a specific handler assigned through @a sl_on or @a sl_once.
+ * Providing any of the latter two functions is opt-in for the stream.
+ *
+ * The way event handlers are called is defined at construction time through
+ * @a slopts_t options. Anyway, depending on how the stream implements its
+ * event notification scheme, the user must be aware that the function may be
+ * called from a different thread or from a signal handler. Therefore, if a
+ * custom state is provided through @c eventp, care must be taken to ensure data
+ * integrity (e.g. mutexes, atomic assignments).
  */
 
 
-sl_API sl_FAlloc sl_getalloc(void **allocf);
+sl_API slecode_e      sl_every     (slhnd_t* hnd, slevent_f eventf, void* eventp); /**< Sets up the global event handler. This event handler will be called for every event raised or recovery procedure started on the stream. Contrary to per-errorcode event handlers, this handler position is ensured to be available if the stream supports event handling. */
+sl_API slecode_e      sl_on        (slhnd_t* hnd, int event, slevent_f eventf, void* eventp); /**< Sets an event handler for specific error codes. As an example, by assigning a handler for @c sl_EOK, everytime the stream succeeds on some operation, the handler will be called. */
+sl_API slecode_e      sl_once      (slhnd_t* hnd, int event, slevent_f eventf, void* eventp); /**< Sets a one-time event handler for specific error codes. The handler will be unregistered as soon as its call finishes. */
 
+
+/*
+ * [ [ [ FILE METHODS ] ] ] ====================================================
+ */
+
+
+#define           sl_fclose(hnd) sl_close(hnd)
+
+sl_API slhnd_t*   sl_fopen     (const slhandle_a* api, const char* filename, slflags_t flags, const slopts_t* opts);
+sl_API slhnd_t*   sl_fwopen    (const slhandle_a* api, const wchar_t* filename, slflags_t flags, const slopts_t* opts);
+sl_API slhnd_t*   sl_freopen   (slhnd_t* hnd, const char* filename, slflags_t flags, const slopts_t* opts);
+
+sl_API slflags_t  sl_fgetflags (slhnd_t* hnd);
+sl_API void*      sl_fgetstdh  (slhnd_t* hnd); /**< Gets the underlying standards-compliant (ANSI C) file handle. */
+sl_API int        sl_fgetstdi  (slhnd_t* hnd); /**< Gets the underlying system-dependent file identifier, if available. Useable on Linux systems or others capable of representing opened files as integer identifiers. */
+sl_API void*      sl_fgethnd   (slhnd_t* hnd); /**< Gets the underlying system-dependent file handle, if available. */
+
+
+/*
+ * [ [ [ BUFFER AND FILTER METHODS ] ] ] =======================================
+ */
+
+
+sl_API slhnd_t*       sl_filter     (const slhandle_a* api, slhnd_t* hnd, slfilter_f filterf, void* filterp, slopts_t* opts);
+sl_API slhnd_t*       sl_filterinto (const slhandle_a* api, slhnd_t* hnd, const char* encname, slopts_t* opts);
+sl_API slhnd_t*       sl_filterenc  (const slhandle_a* api, slhnd_t* hnd, slenc_t* enc, slopts_t* opts);
+sl_API slhnd_t*       sl_filtercnv  (const slhandle_a* api, slhnd_t* hnd, slhnd_t* cnv, slopts_t* opts);
+sl_API slhnd_t*       sl_buffer     (const slhandle_a* api, slhnd_t* hnd, slflags_t bufmode, size_t bufsize, slcpoint_t slopts_t* opts);
+
+
+/*
+ * [ [ [ VARIABLES ] ] ] =======================================================
+ */
+
+
+sl_DATA const slloc_t const* sl_gstdc_loc;    /**< Reflects the global locale currently set through @c setlocale(). */ 
+sl_DATA const slloc_t const* sl_ascii_loc;    /**< Reentrant ASCII locale, based on the STDC's C locale. */
+sl_DATA const slloc_t const* sl_sl_loc;       /**< A reentrant ASCII-based locale that accepts characters greater than 127. */
+
+sl_DATA const slenc_t const* sl_gstdc_enc;    /**< Placeholder for the codepage or encoding currently set through @c setlocale(). */
+sl_DATA const slenc_t const* sl_ascii_enc;    /**< Impleemntation of the ASCII encoding. */
+
+#endif /* SL_H_ */
+
+
+
+
+
+
+
+#if 0
+
+/* Some sketches... */
+
+slopts_t opts = {0};
+slhnd_t* file;
+opts.filename = "filename.txt";
+opts.fileflags = sl_RW | sl_BINARY;
+file = sl_open(sl_stdio_api, &opts);
+
+
+char str = { '\n' };
+slhnd_t* file = sl_fopen("path", "opts");
+if (!sl_valid(file)) {
+    return 0;
+}
+sl_eset(file, "UTF-8");
+sl_fprint(file, "hey you!");
+sl_fwrite(file, str, sizeof(str));
+sl_fclose(file);
 
 #endif
